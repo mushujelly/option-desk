@@ -1,0 +1,13 @@
+{
+  "name": "option-desk-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db": "node scripts/database.mjs",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm --prefix web run build"
+  },
+  "dependencies": {
+    "embedded-postgres": "^18.4.0-beta.17"
+  }
+}

@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: optiondesk
+      POSTGRES_PASSWORD: ${OD_DB_PASSWORD:?Set OD_DB_PASSWORD}
+      POSTGRES_DB: optiondesk
+    volumes:
+      - optiondesk-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U optiondesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build: .
+    command: ["option-desk", "serve"]
+    ports: ["127.0.0.1:8765:8765"]
+    env_file: .env
+    environment:
+      OD_HOST: 0.0.0.0
+      OD_DATABASE_URL: postgresql+psycopg://optiondesk:${OD_DB_PASSWORD}@postgres:5432/optiondesk
+    depends_on:
+      postgres:
+        condition: service_healthy
+  worker:
+    build: .
+    command: ["option-desk", "worker"]
+    env_file: .env
+    environment:
+      OD_DATABASE_URL: postgresql+psycopg://optiondesk:${OD_DB_PASSWORD}@postgres:5432/optiondesk
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  optiondesk-db:
