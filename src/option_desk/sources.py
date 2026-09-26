@@ -37,10 +37,28 @@ class Sources:
         author="",
         url="",
         revision="original",
+        origin=None,
     ):
+        # Relay provenance: Discord messages posted by a webhook (relay bots)
+        # or forwarded from another message (message_reference) are reposts,
+        # not original flow. L2 resonance/counting must exclude them.
+        if origin is None:
+            origin = (
+                "relay"
+                if payload.get("message_reference") or payload.get("webhook_id")
+                else "source"
+            )
         try:
             events = parse(
-                source, external_id, content, dt, payload, author, url, revision
+                source,
+                external_id,
+                content,
+                dt,
+                payload,
+                author,
+                url,
+                revision,
+                origin=origin,
             )
             for event in events:
                 if event.event_time < now() - timedelta(
@@ -63,6 +81,7 @@ class Sources:
                     "missing_event_time",
                     "incomplete_or_ambiguous_contract",
                     "multiple_events_require_stable_ids",
+                    "noise:educational",
                 }
                 else "parse_validation_failed"
             )
