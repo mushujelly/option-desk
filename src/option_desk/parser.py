@@ -25,7 +25,8 @@ def parse(
 ):
     if event_time is None or event_time.tzinfo is None:
         raise ValueError("missing_event_time")
-    parse_content = content
+    # Discord twitter embeds escape dots (28\.5, \.76avg); normalize before matching.
+    parse_content = content.replace("\\.", ".")
     cheddar = "Data by Cheddar Flow" in content
     if cheddar:
         labels = dict(re.findall(r"(?m)^([^:\n]+):\s*([^\n]+)", content))
@@ -33,7 +34,7 @@ def parse(
             expiry = datetime.strptime(labels["Expiration"].strip(), "%m/%d/%Y").date()
             parse_content = (
                 f"{labels['Symbol'].strip()} {expiry} {labels['Strike'].strip()} {labels['Call/Put'].strip()[0]}\n"
-                + content
+                + parse_content
             )
             ts = re.findall(r"<t:(\d+):[A-Za-z]>", content)
             if len(set(ts)) == 1:
@@ -47,12 +48,32 @@ def parse(
         r"\$([A-Z][A-Z0-9.\-]{0,6})\s+\$?(\d+(?:\.\d+)?)\s*([CP])\s+(\d{1,2}/\d{1,2}/\d{4})\b",
         re.I,
     )
+    # Positional premium / avg-fill: "$TXN 205 C 08/01/2025 $1.1M (Bullish)" carries
+    # the premium as the first $K/M/B token after the date, with no "Premium:"
+    # label, so the generic labeled-field pass below never sees it. Capture it
+    # per compact match, keyed by the expanded contract identity. Same-line only.
+    positional = {}
 
     def expand(m):
         ticker, strike, right, expiry = m.groups()
-        return (
-            f"{ticker} {datetime.strptime(expiry, '%m/%d/%Y').date()} {strike} {right}"
-        )
+        exp_date = datetime.strptime(expiry, "%m/%d/%Y").date()
+        line_end = parse_content.find("\n", m.end())
+        tail = parse_content[m.end() : line_end if line_end != -1 else len(parse_content)]
+        found = {}
+        pm = re.search(r"\$([\d,]+(?:\.\d+)?)\s*([KMB])\b", tail)
+        if pm:
+            amount = Decimal(pm.group(1).replace(",", "")) * {
+                "K": 1000,
+                "M": 1000000,
+                "B": 1000000000,
+            }[pm.group(2).upper()]
+            found["premium"] = (amount, "USD", None)
+        am = re.search(r"(\d*\.?\d+)\s*avg\b", tail, re.I)
+        if am:
+            found["price"] = (Decimal(am.group(1)), "USD", "reported_average")
+        if found:
+            positional[(ticker.upper(), exp_date.isoformat(), strike, right.upper())] = found
+        return f"{ticker} {exp_date} {strike} {right}"
 
     parse_content = compact.sub(expand, parse_content)
     structured = (raw or {}).get("contracts")
@@ -141,6 +162,19 @@ def parse(
         if not contracts:
             for m in EXPLICIT.finditer(parse_content):
                 ticker, expiry, strike, right = m.groups()
+                fields = {}
+                for fname, (amount, unit, price_type) in positional.get(
+                    (ticker.upper(), expiry, strike, right[0].upper()), {}
+                ).items():
+                    fields[fname] = value(
+                        amount,
+                        origin="source_reported",
+                        provider=source,
+                        as_of=event_time,
+                        unit=unit,
+                        price_type=price_type,
+                        evidence=f"{source}:{external_id}; positional token after contract",
+                    ).model_dump(mode="json")
                 contracts.append(
                     (
                         Contract(
@@ -150,7 +184,7 @@ def parse(
                             right=right[0].upper(),
                         ),
                         None,
-                        {},
+                        fields,
                     )
                 )
     if not contracts:
