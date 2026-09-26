@@ -12,6 +12,26 @@ EXPLICIT = re.compile(
     re.I,
 )
 
+# Layer 1 noise gate: long-form / educational text that carries no parseable
+# contract is skipped with reason "noise:educational". It is never silently
+# dropped: callers archive it with the reason code for observability.
+NOISE_LENGTH_THRESHOLD = 500
+EDUCATIONAL_MARKERS = (
+    "posting this to educate",
+    "educational",
+    "for education",
+    "not financial advice",
+    "do your own research",
+)
+
+
+def is_educational_noise(content: str) -> bool:
+    """True when text looks like long-form educational content, not flow."""
+    if len(content) > NOISE_LENGTH_THRESHOLD:
+        return True
+    lowered = content.lower()
+    return any(marker in lowered for marker in EDUCATIONAL_MARKERS)
+
 
 def parse(
     source,
@@ -22,6 +42,7 @@ def parse(
     author="",
     url="",
     revision="original",
+    origin="source",
 ):
     if event_time is None or event_time.tzinfo is None:
         raise ValueError("missing_event_time")
@@ -154,6 +175,8 @@ def parse(
                     )
                 )
     if not contracts:
+        if is_educational_noise(content):
+            raise ValueError("noise:educational")
         raise ValueError("incomplete_or_ambiguous_contract")
     # Multiple event correspondence requires authoritative child IDs, not text position.
     if len(contracts) > 1 and any(not item[1] for item in contracts):
@@ -251,6 +274,7 @@ def parse(
                 external_id=external_id,
                 revision=revision,
                 original_ref=original_ref,
+                origin=origin,
                 subevent_id=child or "single",
                 event_time=event_time,
                 author=author,
