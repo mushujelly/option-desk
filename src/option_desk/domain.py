@@ -91,6 +91,11 @@ class SourceEvent(BaseModel):
     external_id: str = Field(min_length=1, max_length=200)
     revision: str = Field(default="original", max_length=200)
     original_ref: str | None = Field(default=None, max_length=300)
+    # Provenance of this event. "relay" = reposted/forwarded content (e.g. a
+    # Discord relay bot reposting a tweet or another Discord message).
+    # L2 resonance and counting logic MUST exclude origin="relay" events:
+    # they duplicate the original source and would otherwise double-count.
+    origin: Literal["source", "relay"] = "source"
     subevent_id: str = Field(default="single", max_length=200)
     event_time: datetime
     author: str = ""
