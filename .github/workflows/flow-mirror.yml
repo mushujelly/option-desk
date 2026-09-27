@@ -11,13 +11,15 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r mirror/requirements.txt
+      - name: Install tesseract (for flow-card OCR)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr
       - name: Route A - sync wfreedom
         env:
           WFREEDOM_MDB_URI: ${{ secrets.WFREEDOM_MDB_URI }}
