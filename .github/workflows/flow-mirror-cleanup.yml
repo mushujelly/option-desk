@@ -1,0 +1,25 @@
+name: flow-mirror-cleanup
+
+# Opt-in weekly cleanup: delete docs older than RETENTION_DAYS.
+# Delete this file if you never want automatic cleanup.
+on:
+  schedule:
+    - cron: "0 3 * * 0"   # weekly, Sunday 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r mirror/requirements.txt
+      - name: Cleanup old docs
+        env:
+          NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
+          MIRROR_DB: flow_mirror
+          RETENTION_DAYS: "365"
+        run: python3 mirror/cleanup_old.py
