@@ -21,5 +21,6 @@ jobs:
         env:
           NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
           MIRROR_DB: flow_mirror
-          RETENTION_DAYS: "365"
+          RETENTION_DAYS: "90"
+          DRY_RUN: "1"
         run: python3 mirror/cleanup_old.py
