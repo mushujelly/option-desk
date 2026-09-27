@@ -1,0 +1,25 @@
+name: flow-enrich
+
+# Enrich mirrored option flows with greeks/IV/OI/volume from CBOE's free
+# delayed quote chain (keyless). Runs on its own cadence; never touches
+# the 5-minute mirror loop.
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch:          # manual trigger
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r mirror/requirements.txt
+      - name: Enrich greeks/OI from CBOE
+        env:
+          NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
+          MIRROR_DB: flow_mirror
+        run: python3 mirror/enrich_greeks.py
