@@ -18,10 +18,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r mirror/requirements.txt
-      - name: Debug - show wfreedom URI shape
-        env:
-          WFREEDOM_MDB_URI: ${{ secrets.WFREEDOM_MDB_URI }}
-        run: python3 -c "import os,re; u=os.environ['WFREEDOM_MDB_URI']; print('repr:', repr(re.sub(r'://[^:]+:[^@]+@','://***:***@',u)))"
       - name: Route A - sync wfreedom
         env:
           WFREEDOM_MDB_URI: ${{ secrets.WFREEDOM_MDB_URI }}
