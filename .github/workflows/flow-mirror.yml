@@ -1,0 +1,33 @@
+name: flow-mirror
+
+# Mirror option-flow data into the dedicated Atlas M0 cluster.
+# Route A: wfreedom.option_flow_flows -> new cluster (watermark-based, idempotent)
+# Route B: Discord channels (direct poll) -> new cluster (raw + best-effort parse)
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes
+  workflow_dispatch:          # manual trigger
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r mirror/requirements.txt
+      - name: Route A - sync wfreedom
+        env:
+          WFREEDOM_MDB_URI: ${{ secrets.WFREEDOM_MDB_URI }}
+          NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
+          MIRROR_DB: flow_mirror
+        run: python3 mirror/sync_wfreedom.py
+      - name: Route B - poll Discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
+          MIRROR_DB: flow_mirror
+          DISCORD_CHANNELS: ${{ vars.DISCORD_CHANNELS }}
+        run: python3 mirror/poll_discord.py
