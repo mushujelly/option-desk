@@ -54,6 +54,20 @@ def main() -> int:
     watermark = state.get("last_first_seen_at", "")
     last_id = state.get("last_id", "")
 
+    # Fresh start (no watermark): begin at BACKFILL_SINCE instead of the
+    # beginning of time. Default = 3 months ago; override via env, e.g.
+    # BACKFILL_SINCE=2026-01-01T00:00:00+00:00. Empty string = from oldest.
+    if not watermark:
+        since = os.environ.get("BACKFILL_SINCE", "")
+        if not since:
+            since = (
+                datetime.datetime.now(datetime.timezone.utc)
+                - datetime.timedelta(days=90)
+            ).isoformat()
+        if since:
+            watermark = since
+            print(f"no watermark, starting backfill at {watermark}", file=sys.stderr)
+
     # first_seen_at is an ISO string in wfreedom -> plain string comparison works.
     # Tuple (first_seen_at, _id) resume: exact, never skips same-timestamp docs
     # when a batch is truncated by the limit.
