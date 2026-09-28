@@ -13,6 +13,69 @@ EXPLICIT = re.compile(
 )
 
 
+def normalize_alert(content, event_year):
+    """Normalize supported complete contracts; missing years use the event year and require market validation."""
+    number = r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+    labels = dict(re.findall(r"(?m)^([^:\n]+):\s*([^\n]+)", content))
+    if all(k in labels for k in ("Symbol", "Strike", "Expiration")):
+        sides = re.findall(
+            r"(?im)^\s*(?:\d+ )?(?:Large |Unusual )?(Call|Put)(?: Golden)? Sweep(?: Orders?)?\s*$",
+            content,
+        )
+        if len(sides) == 1 and "Call/Put" not in labels:
+            expiry = datetime.strptime(labels["Expiration"].strip(), "%m/%d/%Y").date()
+            return (
+                f"{labels['Symbol'].strip()} {expiry} {labels['Strike'].strip().replace(',', '')} {sides[0][0]}\n"
+                + content
+            )
+    if len(re.findall(r"options flow in \$[A-Z]+", content, re.I)) > 1:
+        raise ValueError("multiple_events_require_stable_ids")
+    fund = re.search(
+        r"options flow in \$([A-Z]{1,6})\s+\$(" + number + r")[KMB]? of "
+        r"([A-Za-z]+ \d{1,2}(?: 20\d{2})?) \$(" + number + r") (calls|puts)\b",
+        content,
+        re.I,
+    )
+    if fund:
+        ticker, _, expiry, strike, side = fund.groups()
+        if len(expiry.split()) == 2:
+            expiry += f" {event_year}"
+        expiry = datetime.strptime(expiry, "%b %d %Y").date()
+        return f"{ticker} {expiry} {strike.replace(',', '')} {side[0]}\n" + content
+    # Full dates only; keep every match so multi-event rejection still applies.
+    pattern = re.compile(
+        r"(?<![\w$])\$?([A-Z]{1,6})\s+("
+        + number
+        + r")\s*(C|P|Calls?|Puts?)\s+(\d{1,2}/\d{1,2}/(?:20\d{2}|\d{2}))\b",
+        re.I,
+    )
+
+    def expand(m):
+        ticker, strike, side, expiry = m.groups()
+        fmt = "%m/%d/%Y" if len(expiry.split("/")[-1]) == 4 else "%m/%d/%y"
+        return f"{ticker} {datetime.strptime(expiry, fmt).date()} {strike.replace(',', '')} {side[0]}"
+
+    normalized = pattern.sub(expand, content)
+    if normalized != content:
+        return normalized
+    if len(re.findall(r"(?:call|put) strike (?:expiring|for) \d", content, re.I)) > 1:
+        raise ValueError("multiple_events_require_stable_ids")
+    prose = re.search(
+        r"\$([A-Z]{1,6})\b[^\n]*?\b("
+        + number
+        + r") (call|put) strike (?:expiring|for) (\d{1,2}/\d{1,2}/20\d{2})\b",
+        content,
+        re.I,
+    )
+    if prose:
+        ticker, strike, side, expiry = prose.groups()
+        return (
+            f"{ticker} {datetime.strptime(expiry, '%m/%d/%Y').date()} {strike.replace(',', '')} {side[0]}\n"
+            + content
+        )
+    return content
+
+
 def parse(
     source,
     external_id,
@@ -25,14 +88,21 @@ def parse(
 ):
     if event_time is None or event_time.tzinfo is None:
         raise ValueError("missing_event_time")
-    parse_content = content
+    parse_content = normalize_alert(content, event_time.year)
+    inferred_year = bool(
+        re.search(
+            r"options flow in \$[A-Z]+\s+\$[\d,.]+[KMB]? of [A-Za-z]+ \d{1,2} \$",
+            content,
+            re.I,
+        )
+    )
     cheddar = "Data by Cheddar Flow" in content
     if cheddar:
         labels = dict(re.findall(r"(?m)^([^:\n]+):\s*([^\n]+)", content))
         if all(k in labels for k in ("Symbol", "Strike", "Expiration", "Call/Put")):
             expiry = datetime.strptime(labels["Expiration"].strip(), "%m/%d/%Y").date()
             parse_content = (
-                f"{labels['Symbol'].strip()} {expiry} {labels['Strike'].strip()} {labels['Call/Put'].strip()[0]}\n"
+                f"{labels['Symbol'].strip()} {expiry} {labels['Strike'].strip().replace(',', '')} {labels['Call/Put'].strip()[0]}\n"
                 + content
             )
             ts = re.findall(r"<t:(\d+):[A-Za-z]>", content)
@@ -222,7 +292,7 @@ def parse(
                 ("price", r"(?:price|成交价)\s*[:=@]?\s*\$?([\d,.]+)", "USD"),
                 (
                     "premium",
-                    r"(?:premium|权利金)\s*[:=]?\s*\$?([\d,.]+)\s*([KMB])?",
+                    r"(?:premiums?|权利金)\s*[:=]?\s*\$?([\d,.]+)\s*([KMB])?",
                     "USD",
                 ),
                 (
@@ -245,6 +315,42 @@ def parse(
                         price_type="reported_trade" if name == "price" else None,
                         evidence=f"{source}:{external_id}",
                     ).model_dump(mode="json")
+        extra = []
+        if "options flow in $" in content:
+            extra = [
+                ("premium", r"\$(\d[\d,]*(?:\.\d+)?)([KMB])? of ", "USD"),
+                ("contracts", r"(\d[\d,]*) contracts against", "contracts"),
+                ("open_interest", r"against (\d[\d,]*) open interest", "contracts"),
+            ]
+        elif re.search(r"\b(?:C|P) \d{1,2}/\d{1,2}/20\d{2} \$", content):
+            extra = [
+                (
+                    "premium",
+                    r"\b[CP] \d{1,2}/\d{1,2}/20\d{2} \$(\d[\d,]*(?:\.\d+)?)([KMB])?",
+                    "USD",
+                )
+            ]
+        for name, pattern, unit in extra:
+            m = re.search(pattern, content, re.I)
+            if m:
+                amount = Decimal(m[1].replace(",", "")) * {
+                    "K": 1000,
+                    "M": 1000000,
+                    "B": 1000000000,
+                }.get((m[2] or "").upper() if m.lastindex == 2 else "", 1)
+                fields[name] = value(
+                    amount,
+                    origin="source_reported",
+                    provider=source,
+                    as_of=None if name == "open_interest" else event_time,
+                    unit=unit,
+                    evidence=f"{source}:{external_id}"
+                    + (
+                        f"; expiry_year_inferred={event_time.year}; requires_market_validation"
+                        if inferred_year
+                        else ""
+                    ),
+                ).model_dump(mode="json")
         output.append(
             SourceEvent(
                 source=source,
@@ -258,7 +364,20 @@ def parse(
                 content=content,
                 contract=contract,
                 fields=fields,
-                raw=raw or {},
+                raw={
+                    **(raw or {}),
+                    **(
+                        {
+                            "option_desk_expiry_inference": {
+                                "year": event_time.year,
+                                "basis": "message_year",
+                                "requires_market_validation": True,
+                            }
+                        }
+                        if inferred_year
+                        else {}
+                    ),
+                },
             )
         )
     return output

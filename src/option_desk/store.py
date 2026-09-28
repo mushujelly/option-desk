@@ -419,7 +419,21 @@ class Store:
             "comparisons": compare(a, b, d["applicability"] == "active"),
         }
 
-    def list_baselines(self, include_discarded=False, limit=200):
+    def list_baselines(
+        self,
+        include_discarded=False,
+        limit=200,
+        *,
+        offset=0,
+        ticker=None,
+        right=None,
+        expiration=None,
+        event_from=None,
+        event_to=None,
+        status=None,
+        search=None,
+        with_total=False,
+    ):
         q = (
             select(baselines.c.id)
             .join(instruments, instruments.c.id == baselines.c.instrument_id)
@@ -427,16 +441,62 @@ class Store:
                 instruments.c.contract["expiration"].astext
                 >= str(now().astimezone(ZoneInfo("America/New_York")).date())
             )
-            .order_by(baselines.c.event_time.desc(), baselines.c.id)
-            .limit(limit)
         )
         if not include_discarded:
             q = q.where(
                 baselines.c.status != "discarded", baselines.c.applicability == "active"
             )
+        for key, val in (
+            ("ticker", ticker.upper() if ticker else None),
+            ("right", right),
+            ("expiration", str(expiration) if expiration else None),
+        ):
+            if val is not None:
+                q = q.where(instruments.c.contract[key].astext == val)
+        if event_from is not None:
+            q = q.where(baselines.c.event_time >= event_from)
+        if event_to is not None:
+            q = q.where(baselines.c.event_time < event_to)
+        if status is not None:
+            q = q.where(baselines.c.status == status)
+        if search and search.strip():
+            q = q.where(
+                or_(
+                    *(
+                        instruments.c.contract[k].astext.icontains(
+                            search.strip(), autoescape=True
+                        )
+                        for k in ("ticker", "expiration", "strike")
+                    )
+                )
+            )
         with self.engine.connect() as c:
-            ids = c.execute(q).scalars().all()
-        return [self.comparison(i) for i in ids]
+            total = (
+                c.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+                if with_total
+                else None
+            )
+            ids = (
+                c.execute(
+                    q.order_by(baselines.c.event_time.desc(), baselines.c.id)
+                    .offset(offset)
+                    .limit(limit)
+                )
+                .scalars()
+                .all()
+            )
+        items = [self.comparison(i) for i in ids]
+        if with_total:
+            return {
+                "items": items,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "next_offset": offset + len(items)
+                if offset + len(items) < total
+                else None,
+            }
+        return items
 
     def supplement_close(self, pack):
         from .domain import Contract
