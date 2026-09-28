@@ -21,9 +21,11 @@ Env:
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import sys
 import time
+from pathlib import Path
 
 import httpx
 from pymongo import DESCENDING, MongoClient
@@ -36,6 +38,10 @@ CBOE = "https://cdn.cboe.com/api/global/delayed_quotes/options/{}.json"
 # index options need the underscore prefix on the request; the option symbols
 # themselves use the plain prefix (SPX261016C00200000, no underscore).
 INDEX_REQUEST = {"SPX": "_SPX", "VIX": "_VIX", "NDX": "_NDX", "RUT": "_RUT", "DJX": "_DJX"}
+
+# Symbol-level IV stats scraped daily from Market Chameleon (browser pipeline)
+# and committed to mirror/data/iv_stats.json. Joined here, never fetched live.
+IV_STATS_PATH = Path(__file__).resolve().parent / "data" / "iv_stats.json"
 
 GREEK_FIELDS = ["delta", "gamma", "theta", "vega", "rho", "iv", "theo"]
 
@@ -66,15 +72,26 @@ def option_key(opt_prefix: str, expiration: str, strike_text: str, option_type: 
         return None
 
 
-def fetch_chain(client: httpx.Client, request_sym: str) -> dict | None:
+def fetch_chain(client: httpx.Client, request_sym: str) -> tuple[dict, float | None] | None:
+    """Returns (options_by_symbol, underlying_iv30) or None on failure."""
     try:
         r = client.get(CBOE.format(request_sym), timeout=30)
         r.raise_for_status()
-        data = r.json().get("data", {}).get("options", [])
-        return {o.get("option", ""): o for o in data if o.get("option")}
+        data = r.json().get("data", {})
+        opts = {o.get("option", ""): o for o in data.get("options", []) if o.get("option")}
+        return opts, data.get("iv30")
     except Exception as e:
         print(f"cboe fetch failed for {request_sym}: {e}")
         return None
+
+
+def load_iv_stats() -> dict:
+    try:
+        d = json.loads(IV_STATS_PATH.read_text())
+        return d.get("symbols", {})
+    except Exception as e:
+        print(f"iv_stats not loaded ({e}); symbol-level IV stats skipped")
+        return {}
 
 
 def main() -> int:
@@ -103,8 +120,9 @@ def main() -> int:
 
     http = httpx.Client(headers={"User-Agent": "FlowMirrorEnrich/1.0"}, timeout=30,
                         follow_redirects=True)
-    chains: dict[str, dict | None] = {}
-    n_ok = n_miss = n_fail = n_dry = 0
+    iv_stats = load_iv_stats()
+    chains: dict[str, tuple[dict, float | None] | None] = {}
+    n_ok = n_miss = n_fail = n_dry = n_iv = 0
 
     for doc in docs:
         symbol = doc.get("symbol") or ""
@@ -116,10 +134,11 @@ def main() -> int:
         if req_sym not in chains:
             chains[req_sym] = fetch_chain(http, req_sym)
             time.sleep(1)  # be polite to the free endpoint
-        chain = chains[req_sym]
-        if chain is None:
+        got = chains[req_sym]
+        if got is None:
             n_fail += 1  # transient: not marked, retried next run
             continue
+        chain, iv30_underlying = got
         o = chain.get(key)
         if not o:
             n_miss += 1
@@ -137,10 +156,23 @@ def main() -> int:
                 "rho": o.get("rho"),
                 "iv": iv,
                 "theo_price": o.get("theo"),
+                "iv30_underlying": iv30_underlying,
                 "greeks_enriched_at": utcnow_iso(),
                 "greeks_source": "cboe-delayed",
                 "greeks_quality": "ok" if iv and iv > 0 else "stale_quote",
             }
+            # symbol-level IV stats (Market Chameleon daily snapshot)
+            st = iv_stats.get(symbol.upper())
+            if st:
+                n_iv += 1
+                update.update({
+                    "iv30_pctile_1y": st.get("iv30_pctile_1y"),
+                    "iv_rank": st.get("iv_rank"),
+                    "hv20": st.get("hv20"),
+                    "iv30_52w_high": st.get("iv30_52w_high"),
+                    "iv30_52w_low": st.get("iv30_52w_low"),
+                    "iv_stats_at": st.get("date"),
+                })
             # fill OI/volume only when the doc doesn't already have them
             if not doc.get("open_interest"):
                 update["open_interest"] = o.get("open_interest")
@@ -151,7 +183,7 @@ def main() -> int:
             continue
         coll.update_one({"_id": doc["_id"]}, {"$set": update})
 
-    print(f"enrich done: ok={n_ok} no_match={n_miss} fetch_fail={n_fail}"
+    print(f"enrich done: ok={n_ok} no_match={n_miss} fetch_fail={n_fail} iv_stats_joined={n_iv}"
           + (" DRY_RUN" if DRY_RUN else ""))
     return 0
 
