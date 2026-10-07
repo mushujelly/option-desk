@@ -4,7 +4,8 @@ import base64
 import json
 from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, date
+from typing import Literal
 from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -71,9 +72,39 @@ def create_app(settings=None, store=None):
         }
 
     @app.get("/api/v1/baselines")
-    def listing(include_discarded: bool = False, limit: int = Query(200, ge=1, le=500)):
+    def listing(
+        include_discarded: bool = False,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+        ticker: str | None = Query(None, min_length=1, max_length=16),
+        right: Literal["C", "P"] | None = None,
+        expiration: date | None = None,
+        event_from: datetime | None = None,
+        event_to: datetime | None = None,
+        status: Literal["pending", "ready", "unavailable", "discarded"] | None = None,
+        search: str | None = Query(None, max_length=100),
+    ):
+        for dt in (event_from, event_to):
+            if dt is not None and dt.tzinfo is None:
+                raise HTTPException(
+                    422, "时间必须包含时区，例如 2026-09-25T00:00:00-04:00"
+                )
+        if event_from and event_to and event_from >= event_to:
+            raise HTTPException(422, "event_from 必须早于 event_to")
         return {
-            "items": store.list_baselines(include_discarded, limit),
+            **store.list_baselines(
+                include_discarded,
+                limit,
+                offset=offset,
+                ticker=ticker.strip() if ticker else None,
+                right=right,
+                expiration=expiration,
+                event_from=event_from,
+                event_to=event_to,
+                status=status,
+                search=search,
+                with_total=True,
+            ),
             "schema_version": "1",
         }
 
