@@ -3,6 +3,9 @@ name: flow-weekly-brief
 # Unified weekly brief: Discord flow mirror + optionbrief + email sources.
 # Commits mirror/data/weekly_brief.md to the repo; the assistant reads it
 # via API and presents it to the user.
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: "0 12 * * 1"   # weekly, Monday 12:00 UTC
