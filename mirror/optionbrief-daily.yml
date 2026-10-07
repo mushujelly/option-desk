@@ -1,0 +1,26 @@
+name: optionbrief-daily
+
+# Daily ingest of optionbrief.com (KZG Option House) market-wide options aggregates
+# into flow_mirror.ob_market_overview / ob_market_daily for cross-validation.
+# The site publishes the next pack ~10:03 UTC; run after that with buffer.
+on:
+  schedule:
+    - cron: "30 11 * * *"   # daily 11:30 UTC
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r mirror/requirements.txt
+      - name: Ingest optionbrief pack
+        env:
+          NEW_MDB_URI: ${{ secrets.NEW_MDB_URI }}
+          MIRROR_DB: flow_mirror
+          BACKFILL: "1"   # upserts the 584-day aggregates once; harmless on later runs
+        run: python3 mirror/ingest_optionbrief.py
