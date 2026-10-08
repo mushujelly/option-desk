@@ -37,6 +37,7 @@ UA = {"User-Agent": "muse-ob-ingest/1.0 (+cross-validation reference)"}
 REQUIRED_TOP = {"packagedAt", "index", "analytics", "days"}
 OVERVIEW_COL = "ob_market_overview"
 DAILY_COL = "ob_market_daily"
+INTRADAY_COL = "ob_intraday"
 
 
 def _get(url: str) -> bytes:
@@ -61,8 +62,8 @@ def fetch_pack() -> dict:
     return pack
 
 
-def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list]:
-    """Returns (overview_docs, daily_docs). Upsert by _id (idempotent)."""
+def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list, list]:
+    """Returns (overview_docs, daily_docs, intraday_docs). Upsert by _id (idempotent)."""
     index = pack["index"]
     latest = index.get("latestDate")
     if not latest or latest not in pack.get("days", {}):
@@ -87,6 +88,7 @@ def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list]:
         "totalPut": ov.get("totalPut"),
         "marketCp": ov.get("marketCp"),
         "categories": ov.get("category"),
+        "digest": day.get("digest"),  # 站方中文盘口摘要
     }]
 
     daily_docs = []
@@ -115,6 +117,12 @@ def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list]:
                 "hottest": r.get("hottest"),
                 "hottestShort": r.get("hottestShort"),
             })
+    # 成交活动观察: mark top-8 symbols by premium (site's "activity watch" cards).
+    ranked = sorted((d for d in daily_docs if d.get("premiumNotional")),
+                    key=lambda d: d["premiumNotional"], reverse=True)
+    top8 = {d["symbol"] for d in ranked[:8]}
+    for d in daily_docs:
+        d["activity_top8"] = d["symbol"] in top8
 
     if backfill:
         have = {latest}
@@ -138,14 +146,30 @@ def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list]:
                 "marketCp": d.get("marketCp"),
                 "categories": d.get("category"),
             })
-    return overview_docs, daily_docs
+    # Intraday 30-min buckets: market-wide call/put/total per slot +
+    # per-symbol heatmap (15 symbols incl. VIX). Latest day only, no backfill.
+    intraday_docs = []
+    bk = day.get("buckets") or {}
+    if bk.get("labels") or bk.get("market"):
+        intraday_docs.append({
+            "_id": latest,
+            "date": latest,
+            "source": "optionbrief",
+            "labels": bk.get("labels"),
+            "market": bk.get("market"),
+            "heatmap": bk.get("heatmap"),
+        })
+    return overview_docs, daily_docs, intraday_docs
 
 
-def upsert_docs(uri: str, db_name: str, overview_docs: list, daily_docs: list) -> None:
+def upsert_docs(uri: str, db_name: str, overview_docs: list,
+               daily_docs: list, intraday_docs: list) -> None:
     # Same upsert pattern as sync_wfreedom.py / poll_discord.py (proven in prod).
     from pymongo import MongoClient
     db = MongoClient(uri, serverSelectionTimeoutMS=20000)[db_name]
-    for docs, coll_name in ((overview_docs, OVERVIEW_COL), (daily_docs, DAILY_COL)):
+    for docs, coll_name in ((overview_docs, OVERVIEW_COL),
+                            (daily_docs, DAILY_COL),
+                            (intraday_docs, INTRADAY_COL)):
         n_up = n_mod = 0
         coll = db[coll_name]
         for d in docs:
@@ -169,15 +193,28 @@ def main() -> int:
         print(f"fetch/parse failed: {e}", file=sys.stderr)
         return 2
     try:
-        overview_docs, daily_docs = build_docs(
+        overview_docs, daily_docs, intraday_docs = build_docs(
             pack, backfill=os.environ.get("BACKFILL", "") == "1")
     except Exception as e:
         print(f"schema validation failed: {e}", file=sys.stderr)
         return 2
     latest = pack["index"]["latestDate"]
     print(f"pack latestDate={latest} overview_docs={len(overview_docs)} "
-          f"daily_docs={len(daily_docs)}")
-    upsert_docs(uri, db_name, overview_docs, daily_docs)
+          f"daily_docs={len(daily_docs)} intraday_docs={len(intraday_docs)}")
+    upsert_docs(uri, db_name, overview_docs, daily_docs, intraday_docs)
+    # Daily snapshot to disk (repo): one JSON per trading day, so the data
+    # is readable without Atlas access and survives DB issues.
+    snap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "data", "optionbrief_snapshots")
+    os.makedirs(snap_dir, exist_ok=True)
+    snap_path = os.path.join(snap_dir, f"{latest}.json")
+    with open(snap_path, "w") as f:
+        json.dump({"date": latest, "source": "optionbrief",
+                   "overview": overview_docs[0] if overview_docs else None,
+                   "daily": daily_docs,
+                   "intraday": intraday_docs[0] if intraday_docs else None,
+                   }, f)
+    print(f"snapshot: {snap_path}")
     return 0
 
 
