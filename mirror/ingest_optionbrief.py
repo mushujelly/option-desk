@@ -150,15 +150,38 @@ def build_docs(pack: dict, backfill: bool = False) -> tuple[list, list, list]:
     # per-symbol heatmap (15 symbols incl. VIX). Latest day only, no backfill.
     intraday_docs = []
     bk = day.get("buckets") or {}
+    labels = bk.get("labels")
     if bk.get("labels") or bk.get("market"):
         intraday_docs.append({
             "_id": latest,
             "date": latest,
             "source": "optionbrief",
-            "labels": bk.get("labels"),
+            "labels": labels,
             "market": bk.get("market"),
             "heatmap": bk.get("heatmap"),
         })
+    if backfill:
+        # Historical intraday: analytics.daily[].buckets is a plain 13-number
+        # list (total volume per slot, no call/put split). Normalize to the
+        # same shape so queries work uniformly.
+        have_intra = {latest}
+        for d in pack["analytics"].get("daily", []):
+            dt = d.get("date")
+            hbk = d.get("buckets")
+            if not dt or dt in have_intra or not hbk:
+                continue
+            have_intra.add(dt)
+            lab = labels or [f"slot{i}" for i in range(len(hbk))]
+            intraday_docs.append({
+                "_id": dt,
+                "date": dt,
+                "source": "optionbrief",
+                "labels": lab[:len(hbk)],
+                "market": [{"time": lab[i] if i < len(lab) else f"slot{i}",
+                            "total": v} for i, v in enumerate(hbk)],
+                "heatmap": None,
+                "hist_simple": True,
+            })
     return overview_docs, daily_docs, intraday_docs
 
 
