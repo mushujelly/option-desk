@@ -1,62 +1,62 @@
-# Flow 周报（2026-10-05 ~ 2026-10-12）
+# Flow 周报（2026-10-12 ~ 2026-10-19）
 
 ## 1. 自家 Flow（Discord mirror）
-- 新增 53 条 flow 记录
+- 新增 86 条 flow 记录
 - 权利金 Top 15：
-  - SPY: 4 条, $37.1M
-  - SNDK: 3 条, $32.5M
-  - MU: 4 条, $14.3M
-  - VSAT: 1 条, $13.6M
-  - SPCX: 4 条, $11.9M
-  - ASTS: 1 条, $8.8M
-  - INTC: 1 条, $6.4M
-  - GOOGL: 1 条, $4.4M
-  - MSFT: 2 条, $3.2M
-  - AAPL: 2 条, $3.1M
-  - GME: 1 条, $2.5M
-  - MRNA: 2 条, $2.4M
-  - UNM: 1 条, $2.3M
-  - IBM: 1 条, $2.2M
-  - CSCO: 1 条, $1.4M
+  - CEG: 14 条, $37.7M
+  - IBIT: 2 条, $5.8M
+  - CI: 4 条, $5.3M
+  - JBS: 2 条, $4.0M
+  - TLT: 1 条, $2.5M
+  - AKAM: 2 条, $2.1M
+  - ZS: 3 条, $1.7M
+  - MU: 1 条, $1.7M
+  - ASST: 5 条, $1.7M
+  - ACHR: 7 条, $1.5M
+  - INFY: 2 条, $1.0M
+  - VSAT: 1 条, $1.0M
+  - ALC: 1 条, $1.0M
+  - WULF: 1 条, $899K
+  - SKE: 1 条, $881K
 - 大单 Top 10（≥$500K）：
-  - SNDK 2026-12-18 1750call $14.4M bullish [flowgod]
-  - SNDK 2027-01-15 1760call $14.1M bullish [flowgod]
-  - VSAT 2027-01-15 90call $13.6M unknown [flowgod]
-  - SPY 2026-10-14 790call $12.2M unknown [flowgod]
-  - SPY 2026-10-14 790call $10.2M unknown [flowgod]
-  - ASTS 2027-01-15 50put $8.8M unknown [flowgod]
-  - SPY 2026-10-14 790call $8.3M unknown [flowgod]
-  - SPY 2026-10-14 790call $6.4M bullish [flowgod]
-  - INTC 2027-01-15 145call $6.4M unknown [flowgod]
-  - MU 2026-10-16 1070call $6.0M unknown [flowgod]
-- 渠道分布：flowgod 53
+  - CEG 2025-04-17 270put $12.0M bearish [notableflow]
+  - CEG 2025-04-17 270put $12.0M bearish [notableflow]
+  - CI 2025-06-20 350call $3.4M bearish [notableflow]
+  - IBIT 2026-10-30 47call $3.2M unknown [notableflow]
+  - CEG 2025-06-20 260put $3.2M bearish [notableflow]
+  - CEG 2025-06-20 260put $3.2M bearish [notableflow]
+  - IBIT 2026-10-30 47call $2.6M unknown [flowgod]
+  - TLT 2026-11-30 85call $2.5M bullish [flowgod]
+  - JBS 2027-01-15 15call $2.2M unknown [notableflow]
+  - JBS 2027-01-15 15call $1.8M unknown [flowgod]
+- 渠道分布：notableflow 78, flowgod 8
 
 ## 2. 全市场（optionbrief）
-- 5 个交易日：日均成交 $68.3M 张, 日均权利金 $31.34B, 平均 C/P 1.31
-- 权利金 Top 10 标的：SPY $8.58B, MU $8.27B, QQQ $8.23B, NVDA $5.24B, TSLA $4.39B, AMD $3.97B, META $2.91B, SPCX $2.65B, MSFT $2.43B, AMZN $1.82B
+- 5 个交易日：日均成交 $73.2M 张, 日均权利金 $37.60B, 平均 C/P 1.20
+- 权利金 Top 10 标的：QQQ $12.25B, MU $10.86B, SPY $9.81B, NVDA $5.24B, META $4.62B, AMD $3.93B, TSLA $3.84B, AAPL $2.38B, SMH $2.21B, SPCX $2.12B
 
 ## 3. 邮件源（Cboe / Barchart / MC）
 - 条数：cboe 190, mc 100, barchart 50
 - Cboe 大宗 Top：
-  - SPY 2026-10-09 787.0CALL x226000 AskSide
-  - TLT 2028-01-21 100.0CALL x212000 BidSide
-  - TLT 2028-01-21 95.0CALL x170000 AskSide
-  - XLF 2026-11-20 54.0PUT x140000 MidMkt
-  - RUN 2027-05-21 12.0CALL x136000 BidSide
-  - EWZ 2026-10-29 35.0PUT x118000 MidMkt
-  - EWZ 2026-10-29 30.0PUT x118000 MidMkt
-  - EWZ 2026-10-29 49.0CALL x118000 MidMkt
-- Cboe 点名 unusual： APLD, ASTS, BAC, BULL, CLF, CMG, GME, HTZ, IREN, MDT, MRNA, MRVL, NU, PBR, PLTR, RIVN, RUN, WMT, WULF
+  - NVDA 2027-01-15 100.0PUT x162000 MidMkt
+  - MCHP 2026-10-16 72.5CALL x158000 BidSide
+  - HYG 2027-02-19 75.0PUT x142000 AskSide
+  - HYG 2026-12-18 75.0PUT x142000 BidSide
+  - PCG 2026-11-23 20.0CALL x136000 MidMkt
+  - CVNA 2026-10-16 60.0PUT x126000 MidMkt
+  - EWZ 2026-12-17 50.0CALL x119000 MidMkt
+  - TLT 2026-11-30 85.0CALL x115000 AboveAsk
+- Cboe 点名 unusual： ASTS, BAC, CBRS, CIFR, CRWV, GFL, IONQ, IREN, LCID, NBIS, PBR, PCG, PLTR, SKHY, SNAP, SOFI, WMT, WULF
 - Barchart unusual Top：
-  - RUN 2027-05-21 12.0call Vol 135,066 OI 281
-  - RUN 2027-05-21 6.0put Vol 113,008 OI 133
-  - NVDA 2027-02-19 120.0put Vol 112,558 OI 1,069
-  - MARA 2026-10-16 9.5call Vol 55,933 OI 557
-  - SPCX 2026-10-09 165.0put Vol 47,967 OI 552
-  - INTC 2026-10-09 109.0call Vol 47,590 OI 527
-  - INTC 2026-10-07 115.0call Vol 43,377 OI 698
-  - NVDA 2026-10-07 237.5put Vol 42,817 OI 460
-- MC bullish Top： SPY $2.7M, HYG $1.6M, SPY $1.5M, QQQ $1.4M, SPY $1.3M
-- MC bearish Top： HYG $-2.5M, EWZ $-2.1M, XLU $-1.6M, IEF $-1.2M, NVDA $-1.1M
+  - NVDA 2026-10-16 217.5call Vol 131,194 OI 1,547
+  - RIOT 2026-12-18 10.0put Vol 100,000 OI 617
+  - MCHP 2026-12-18 70.0call Vol 88,213 OI 1,311
+  - PBR 2026-11-06 27.0call Vol 61,144 OI 130
+  - AI 2026-10-23 11.5call Vol 47,802 OI 290
+  - AAPL 2026-10-14 342.5put Vol 44,116 OI 515
+  - SPCX 2026-10-14 157.5call Vol 42,613 OI 462
+  - WULF 2026-11-20 9.0put Vol 36,531 OI 280
+- MC bullish Top： HYG $2.0M, IBIT $1.9M, QQQ $1.7M, CIFR $1.7M, SPY $1.4M
+- MC bearish Top： TLT $-1.8M, QQQ $-1.3M, RIG $-1.1M, TSLA $-1.1M, BMBL $-1.0M
 
-_生成时间 2026-10-12 20:56 UTC_
+_生成时间 2026-10-19 18:22 UTC_
